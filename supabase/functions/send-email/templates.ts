@@ -40,6 +40,11 @@ type Payload = Record<string, unknown>;
 
 const money = (v: unknown) => `KES ${Number(v ?? 0).toLocaleString()}`;
 
+// Falls back to the known production URL so links work even before SITE_URL
+// is explicitly configured as a secret -- same reasoning as EMAIL_FROM's
+// default below.
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://nyuzi.vercel.app";
+
 export function renderTemplate(template: string, payload: Payload): EmailContent | null {
   switch (template) {
     case "order_confirmation": {
@@ -120,7 +125,7 @@ export function renderTemplate(template: string, payload: Payload): EmailContent
     }
     case "donation_acknowledgement": {
       const pickup = payload.pickupRequested
-        ? "We'll be in touch by email to arrange collection."
+        ? "We'll be in touch to arrange collection."
         : "Thank you for choosing to donate this item.";
       return {
         subject: "Thank you for your donation to Nyuzi",
@@ -130,6 +135,54 @@ export function renderTemplate(template: string, payload: Payload): EmailContent
            <p>We've logged your donation: <strong>${String(payload.title ?? "")}</strong> (${String(payload.category ?? "")}).</p>
            <p>${pickup}</p>
            <p>Every donation keeps textiles out of landfill and gives them a second life — thank you.</p>`
+        ),
+      };
+    }
+    case "donation_scheduled": {
+      const date = payload.pickupDate ? String(payload.pickupDate) : null;
+      return {
+        subject: "Your Nyuzi pickup has been scheduled",
+        html: layout(
+          "Your donation pickup is scheduled.",
+          `<p>Hi,</p>
+           <p>Your donation <strong>${String(payload.title ?? "")}</strong> is scheduled for pickup${date ? ` around ${date}` : ""}.</p>`
+        ),
+      };
+    }
+    case "donation_collected": {
+      return {
+        subject: "We've collected your Nyuzi donation",
+        html: layout(
+          "Your donation was collected.",
+          `<p>Hi,</p>
+           <p>We've collected your donation: <strong>${String(payload.title ?? "")}</strong>. Thank you — it's on its way to being redistributed or upcycled.</p>`
+        ),
+      };
+    }
+    case "donation_processed": {
+      return {
+        subject: "Your Nyuzi donation has been processed",
+        html: layout(
+          "Your donation has been processed.",
+          `<p>Hi,</p>
+           <p>Good news — your donation <strong>${String(payload.title ?? "")}</strong> has been processed. Its impact is now reflected on our
+           <a href="${SITE_URL}/impact">Impact page</a>.</p>`
+        ),
+      };
+    }
+    case "donation_became_product": {
+      const slug = payload.productSlug ? String(payload.productSlug) : null;
+      const productLink = slug
+        ? `<a href="${SITE_URL}/product/${slug}">${String(payload.productTitle ?? "a new product")}</a>`
+        : `<strong>${String(payload.productTitle ?? "a new product")}</strong>`;
+      return {
+        subject: "Your donation just became something new",
+        html: layout(
+          "Your donation was made into a product.",
+          `<p>Hi,</p>
+           <p>Your donated <strong>${String(payload.donationTitle ?? "item")}</strong> has been upcycled into ${productLink}
+           — now live on the Nyuzi marketplace, with your donation's story told right on the product page.</p>
+           <p>Thank you for helping close the loop.</p>`
         ),
       };
     }

@@ -9,8 +9,9 @@ export type DonationSubmission = {
   pickupRequested: boolean;
   pickupDate?: string;
   pickupAddress?: string;
-  aiSuggestedCategory?: string;
-  aiConfidence?: number;
+  contactName: string;
+  contactPhone: string;
+  contactEmail?: string;
 };
 
 export type PartnerApplication = {
@@ -40,8 +41,9 @@ export async function submitDonation(entry: DonationSubmission) {
     pickup_requested: entry.pickupRequested,
     pickup_date: entry.pickupDate || null,
     pickup_address: entry.pickupAddress || null,
-    ai_suggested_category: entry.aiSuggestedCategory ?? null,
-    ai_confidence: entry.aiConfidence ?? null,
+    contact_name: entry.contactName,
+    contact_phone: entry.contactPhone,
+    contact_email: entry.contactEmail || null,
   });
 
   if (error) return { donationId: null, error: error.message };
@@ -87,13 +89,16 @@ export type MyDonation = {
   condition: number;
   status: "submitted" | "scheduled" | "collected" | "processed";
   pickup_requested: boolean;
+  pickup_date: string | null;
+  pickup_address: string | null;
+  photo_count: number;
   created_at: string;
 };
 
 export async function listMyDonations(userId: string) {
   const { data, error } = await supabase
     .from("donations")
-    .select("id, title, category, condition, status, pickup_requested, created_at")
+    .select("id, title, category, condition, status, pickup_requested, pickup_date, pickup_address, photo_count, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
   return { data: (data as MyDonation[] | null) ?? [], error: error?.message ?? null };

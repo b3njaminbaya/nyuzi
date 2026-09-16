@@ -1,11 +1,19 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import denimTote from "@/assets/products/denim-tote.jpg";
 import patchworkJacket from "@/assets/products/patchwork-jacket.jpg";
 import reclaimedTee from "@/assets/products/reclaimed-tee.jpg";
+import { getImpactTotals } from "@/lib/impact";
+import { formatWater } from "@/lib/format-impact";
 
 const HeroSection: React.FC = () => {
+  const [waterSaved, setWaterSaved] = useState<number | null>(null);
+
+  useEffect(() => {
+    getImpactTotals().then(({ totals }) => setWaterSaved(totals?.water_l ?? 0));
+  }, []);
+
   return (
     <section className="relative overflow-hidden bg-background">
       <div className="container mx-auto grid items-center gap-16 px-6 py-20 md:grid-cols-2 lg:py-28">
@@ -59,9 +67,11 @@ const HeroSection: React.FC = () => {
             alt=""
             className="absolute bottom-0 left-20 h-52 w-48 rotate-[3deg] rounded-lg border-4 border-card object-cover shadow-elegant"
           />
-          <span className="absolute right-10 bottom-6 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-gold-foreground shadow-elegant">
-            18k L water saved so far
-          </span>
+          {waterSaved !== null && waterSaved > 0 && (
+            <span className="absolute right-10 bottom-6 rounded-full bg-gold px-4 py-2 text-sm font-semibold text-gold-foreground shadow-elegant">
+              {formatWater(waterSaved)} water saved so far
+            </span>
+          )}
         </div>
       </div>
     </section>

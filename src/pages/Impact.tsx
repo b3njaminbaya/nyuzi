@@ -123,6 +123,24 @@ const Impact = () => {
           ))}
         </div>
 
+        {/* Methodology disclosure */}
+        <p className="mt-4 text-xs text-muted-foreground max-w-3xl">
+          <strong>How these are calculated:</strong> each donation gets a
+          fixed, category-level estimate (clothing, shoes, accessories, or
+          other) rather than an item-specific measurement. The clothing
+          water figure is anchored to WWF's widely-cited estimate that a
+          single cotton garment requires roughly 2,700 liters of water to
+          produce; the clothing CO₂ figure is a conservative fraction of
+          WRAP's "Valuing Our Clothes" finding that reusing 1&nbsp;kg of
+          clothing avoids roughly 25&nbsp;kg of CO₂ compared to producing
+          new. Shoes, accessories, and other items are scaled down from the
+          clothing figure to reflect smaller average material use, and
+          aren't independently sourced the same way. These are deliberately
+          conservative, rounded estimates — not device measurements — and
+          only count donations that have actually been collected or
+          processed, never ones merely submitted.
+        </p>
+
         {/* Goals */}
         <motion.section
           initial={{ opacity: 0, y: 20 }}

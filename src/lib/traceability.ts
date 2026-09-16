@@ -84,3 +84,20 @@ export async function getProductProvenance(productId: string) {
   }));
   return { data: entries, error: error?.message ?? null };
 }
+
+export type MyDonationProduct = { donationId: string; productTitle: string; productSlug: string };
+
+// The reverse direction from getProductProvenance: for a signed-in donor,
+// which of their own donations became which product (see migration 0026).
+// Scoped server-side to the caller's own donations only.
+export async function getMyDonationProducts() {
+  const { data, error } = await supabase.rpc("get_my_donation_products");
+  const entries: MyDonationProduct[] = (data ?? []).map(
+    (row: { donation_id: string; product_title: string; product_slug: string }) => ({
+      donationId: row.donation_id,
+      productTitle: row.product_title,
+      productSlug: row.product_slug,
+    })
+  );
+  return { data: entries, error: error?.message ?? null };
+}

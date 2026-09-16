@@ -1,5 +1,5 @@
 import Seo from "@/components/Seo";
-import { FaShieldAlt, FaDatabase, FaUserShield, FaEnvelope, FaRegClock, FaRobot, FaHandshake } from "react-icons/fa";
+import { FaShieldAlt, FaDatabase, FaUserShield, FaEnvelope, FaRegClock, FaCamera, FaHandshake } from "react-icons/fa";
 
 const CONTACT_EMAIL = "nyuzi@gmail.com";
 const LAST_UPDATED = "2026-07-11";
@@ -50,7 +50,7 @@ const PrivacyPolicy = () => {
                     </div>
                     <ul className="list-disc pl-6 mt-4 space-y-2 text-muted-foreground">
                         <li><strong>Account details</strong> — name, email address, and password (stored as a salted hash by our authentication provider; we never see or store your raw password).</li>
-                        <li><strong>Donation details</strong> — item title, category, condition, notes, whether you requested pickup, and any photos you choose to attach.</li>
+                        <li><strong>Donation details</strong> — item title, category, condition, notes, whether you requested pickup and the address/date if so, any photos you choose to attach, and your name and phone number (plus email, optional) so we can contact you about the donation, even if you're not signed in.</li>
                         <li><strong>Order details</strong> — full name, phone number, delivery address, and email address (optional) when you check out, plus what you purchased.</li>
                         <li><strong>Payment information</strong> — when you pay with M-Pesa, your phone number is passed to Safaricom's Daraja API to trigger the payment prompt on your handset. We only ever store the resulting M-Pesa receipt number and payment status — we never see your M-Pesa PIN or full transaction credentials.</li>
                         <li><strong>Partner application details</strong> — your name, email, organization, partnership type, and message.</li>
@@ -61,17 +61,13 @@ const PrivacyPolicy = () => {
 
                 <section className="bg-card border border-border shadow-sm p-6 rounded-lg">
                     <div className="flex items-center gap-3">
-                        <FaRobot className="text-primary text-2xl" />
-                        <h2 className="text-2xl font-semibold text-primary">Donation Photos & On-Device AI</h2>
+                        <FaCamera className="text-primary text-2xl" />
+                        <h2 className="text-2xl font-semibold text-primary">Donation Photos</h2>
                     </div>
                     <p className="mt-4 text-muted-foreground leading-relaxed">
                         If you attach a photo to a donation, it's uploaded to a private storage bucket that
                         only you and Nyuzi admins can access (via time-limited, signed links — the file is
-                        never publicly reachable). Separately, the category-suggestion feature on the donation
-                        form runs a small image-classification model directly in your browser using
-                        TensorFlow.js. That analysis happens entirely on your device — the photo is not sent
-                        to any third-party AI service for classification. The category it suggests is stored
-                        alongside your donation so our team can see what the tool detected.
+                        never publicly reachable).
                     </p>
                 </section>
 

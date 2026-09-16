@@ -38,9 +38,10 @@ type Donation = {
   pickup_requested: boolean;
   pickup_date: string | null;
   pickup_address: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   status: "submitted" | "scheduled" | "collected" | "processed";
-  ai_suggested_category: string | null;
-  ai_confidence: number | null;
   created_at: string;
 };
 
@@ -127,7 +128,12 @@ const AdminDonations = () => {
     return donations.filter((d) => {
       if (statusFilter !== "all" && d.status !== statusFilter) return false;
       if (!query) return true;
-      return d.title.toLowerCase().includes(query) || d.category.toLowerCase().includes(query);
+      return (
+        d.title.toLowerCase().includes(query) ||
+        d.category.toLowerCase().includes(query) ||
+        (d.contact_name ?? "").toLowerCase().includes(query) ||
+        (d.contact_phone ?? "").toLowerCase().includes(query)
+      );
     });
   }, [donations, statusFilter, search]);
 
@@ -169,6 +175,7 @@ const AdminDonations = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Item</TableHead>
+                <TableHead>Contact</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Condition</TableHead>
                 <TableHead>Photos</TableHead>
@@ -184,15 +191,18 @@ const AdminDonations = () => {
                     <div className="font-medium">{d.title}</div>
                     {d.notes && <div className="text-xs text-muted-foreground">{d.notes}</div>}
                   </TableCell>
-                  <TableCell className="capitalize">
-                    {d.category}
-                    {d.ai_suggested_category && (
-                      <div className="text-xs text-muted-foreground">
-                        AI suggested: {d.ai_suggested_category}
-                        {d.ai_confidence != null && ` (${Math.round(d.ai_confidence * 100)}%)`}
-                      </div>
+                  <TableCell className="text-sm">
+                    {d.contact_name ? (
+                      <>
+                        <div>{d.contact_name}</div>
+                        <div className="text-xs text-muted-foreground">{d.contact_phone}</div>
+                        {d.contact_email && <div className="text-xs text-muted-foreground">{d.contact_email}</div>}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">— (submitted before this was collected)</span>
                     )}
                   </TableCell>
+                  <TableCell className="capitalize">{d.category}</TableCell>
                   <TableCell>{d.condition}%</TableCell>
                   <TableCell>
                     {d.photo_count > 0 ? (

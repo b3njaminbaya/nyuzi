@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,8 +21,8 @@ import { Slider } from "@/components/ui/slider";
 import Seo from "@/components/Seo";
 import FormBanner, { type FormBannerState } from "@/components/FormBanner";
 import { submitDonation, updateDonationPhotoCount } from "@/lib/submissions";
-import { classifyDonationPhoto, type ClassificationSuggestion } from "@/lib/photo-classifier";
 import { uploadDonationPhotos } from "@/lib/donation-photos";
+import { normalizeKenyanPhone } from "@/lib/mpesa";
 import {
   FaTshirt,
   FaHandHoldingHeart,
@@ -34,18 +35,17 @@ const steps = [
   {
     icon: <FaTshirt className="text-3xl text-gold" />,
     title: "List Your Item",
-    description: "Upload photos — an on-device scan suggests a category for you.",
+    description: "Upload a few clear photos and tell us what it is.",
   },
   {
     icon: <FaTruck className="text-3xl text-gold" />,
-    title: "Schedule Pickup or Drop-off",
-    description: "Choose a convenient time for us to collect your items.",
+    title: "Schedule a Pickup",
+    description: "Request a pickup date — we'll confirm timing with you directly.",
   },
   {
     icon: <FaRecycle className="text-3xl text-gold" />,
-    title: "Impact & Rewards",
-    description:
-      "Earn points, save resources, and track your environmental impact.",
+    title: "Track Your Impact",
+    description: "See the real environmental impact of your donation once it's processed.",
   },
 ];
 
@@ -56,6 +56,13 @@ const donationSchema = z
       required_error: "Choose a category",
     }),
     notes: z.string().trim().optional(),
+    contactName: z.string().trim().min(2, "Enter your full name"),
+    contactPhone: z
+      .string()
+      .trim()
+      .min(9, "Enter a phone number so we can reach you")
+      .refine((v) => normalizeKenyanPhone(v) !== null, "Enter a valid Kenyan number, e.g. 07XXXXXXXX"),
+    contactEmail: z.string().trim().email("Enter a valid email address").optional().or(z.literal("")),
     pickupRequested: z.boolean(),
     pickupDate: z.string().optional(),
     pickupAddress: z.string().trim().optional(),
@@ -71,6 +78,17 @@ const donationSchema = z
 
 type DonationFormValues = z.infer<typeof donationSchema>;
 
+// Conservative, category-level estimates (not item-specific measurements).
+// The clothing water figure is anchored to WWF's widely-cited ~2,700 L
+// footprint for a single cotton garment; the clothing CO2 figure is a
+// conservative fraction of WRAP's "Valuing Our Clothes" finding that
+// reusing 1 kg of clothing avoids roughly 25 kg of CO2 versus producing new.
+// Shoes/accessories/other are scaled down from the clothing figure to
+// reflect smaller average material use -- they aren't independently
+// sourced the way the clothing numbers are. See the methodology note on
+// the Impact page. Deliberately the same regardless of reported condition:
+// the environmental cost of production doesn't change based on how worn an
+// item looks, only its category.
 const IMPACT_BASE: Record<string, { water: number; co2: number; landfill: number }> = {
   clothing: { water: 3000, co2: 3, landfill: 0.05 },
   shoes: { water: 1500, co2: 2, landfill: 0.03 },
@@ -83,14 +101,9 @@ const Donate = () => {
   const [category, setCategory] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [banner, setBanner] = useState<FormBannerState | null>(null);
-  const [suggestion, setSuggestion] = useState<ClassificationSuggestion | null>(null);
-  const [classifying, setClassifying] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const photosRef = useRef<HTMLInputElement>(null);
   const [pickupRequested, setPickupRequested] = useState(false);
-  // Kept separately from `suggestion` (which clears once shown/accepted) so
-  // submission can still record what the AI suggested either way.
-  const lastSuggestionRef = useRef<ClassificationSuggestion | null>(null);
 
   const {
     register,
@@ -117,39 +130,17 @@ const Donate = () => {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handlePhotosChange = async (files: File[]) => {
+  const handlePhotosChange = (files: File[]) => {
     setPhotos(files);
-    setSuggestion(null);
-    lastSuggestionRef.current = null;
-    if (files.length === 0) return;
-    setClassifying(true);
-    const result = await classifyDonationPhoto(files[0]);
-    setClassifying(false);
-    setSuggestion(result);
-    lastSuggestionRef.current = result;
   };
 
-  const acceptSuggestion = () => {
-    if (!suggestion) return;
-    setCategory(suggestion.category);
-    setValue("category", suggestion.category, { shouldValidate: true });
-    setSuggestion(null);
-  };
-
-  const impact = category
-    ? (() => {
-        const base = IMPACT_BASE[category];
-        const factor = condition / 100;
-        return {
-          water: Math.round(base.water * factor),
-          co2: +(base.co2 * factor).toFixed(2),
-          landfill: +(base.landfill * factor).toFixed(3),
-        };
-      })()
-    : null;
+  // No condition factor -- see the comment on IMPACT_BASE above.
+  const impact = category ? IMPACT_BASE[category] : null;
 
   const onSubmit = handleSubmit(async (values) => {
     setBanner(null);
+    // Already guaranteed non-null by the schema's refine() above.
+    const normalizedPhone = normalizeKenyanPhone(values.contactPhone)!;
     const { donationId, error } = await submitDonation({
       title: values.title,
       category: values.category,
@@ -159,8 +150,9 @@ const Donate = () => {
       pickupRequested: values.pickupRequested,
       pickupDate: values.pickupRequested ? values.pickupDate : undefined,
       pickupAddress: values.pickupRequested ? values.pickupAddress : undefined,
-      aiSuggestedCategory: lastSuggestionRef.current?.category,
-      aiConfidence: lastSuggestionRef.current?.confidence,
+      contactName: values.contactName,
+      contactPhone: normalizedPhone,
+      contactEmail: values.contactEmail || undefined,
     });
 
     if (error || !donationId) {
@@ -186,13 +178,16 @@ const Donate = () => {
       }
     }
 
+    const reference = donationId.slice(0, 8);
     setBanner({
       type: "success",
       title: values.pickupRequested ? "Donation saved — pickup requested" : "Donation saved",
       description:
         (values.pickupRequested
-          ? `We'll aim to collect it around ${values.pickupDate} — we'll follow up by email to confirm timing.`
-          : "We'll follow up by email to coordinate collection or drop-off.") + photoNote,
+          ? `We'll aim to collect it around ${values.pickupDate} — we'll contact you directly on ${normalizedPhone} to confirm timing.`
+          : "Thank you — we'll be in touch if we need anything else.") +
+        ` Reference: #${reference}.` +
+        photoNote,
     });
     toast.success(values.pickupRequested ? "Donation saved — pickup requested" : "Donation saved");
 
@@ -201,8 +196,6 @@ const Donate = () => {
     setCondition(70);
     setPickupRequested(false);
     setPhotos([]);
-    setSuggestion(null);
-    lastSuggestionRef.current = null;
     if (photosRef.current) photosRef.current.value = "";
   });
 
@@ -210,7 +203,7 @@ const Donate = () => {
     <div className="min-h-screen bg-gradient-to-b from-primary to-primary-dark text-white">
       <Seo
         title="Donate Clothing — Nyuzi"
-        description="List items, schedule pickup or drop-off, and earn rewards for circular fashion."
+        description="List items, request a pickup, and see the real environmental impact of your donation."
       />
 
       <div className="container mx-auto px-4 py-10">
@@ -219,8 +212,8 @@ const Donate = () => {
           Start a Donation
         </h1>
         <p className="mt-2 text-primary-foreground/80 text-center md:text-left max-w-2xl">
-          Give your clothes a second life — help the planet and earn rewards for
-          contributing to a circular fashion economy.
+          Give your clothes a second life — help keep textiles out of
+          landfill and support Kenya's circular fashion economy.
         </p>
 
         {/* Steps */}
@@ -261,26 +254,6 @@ const Donate = () => {
               <p className="text-xs text-primary-foreground/70">
                 Tip: Take clear, well-lit photos from multiple angles.
               </p>
-              {classifying && (
-                <p className="text-xs text-primary-foreground/70">Scanning photo on your device…</p>
-              )}
-              {suggestion && (
-                <div className="flex items-center gap-2 rounded-md bg-gold/15 border border-gold/30 px-3 py-2 text-sm">
-                  <span className="text-primary-foreground">
-                    Looks like <strong className="capitalize">{suggestion.category}</strong>{" "}
-                    <span className="text-primary-foreground/60">
-                      ({Math.round(suggestion.confidence * 100)}% match, on-device scan)
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={acceptSuggestion}
-                    className="ml-auto shrink-0 rounded-full bg-gold px-3 py-1 text-xs font-semibold text-gold-foreground hover:bg-gold-dark"
-                  >
-                    Use this
-                  </button>
-                </div>
-              )}
               {photos.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-3">
                   {photoPreviews.map((url, index) => (
@@ -369,6 +342,40 @@ const Donate = () => {
             </div>
 
             <div className="space-y-3 rounded-lg border border-white/20 p-4">
+              <div>
+                <Label className="text-base">Your contact details</Label>
+                <p className="text-xs text-primary-foreground/70 mt-1">
+                  So we can reach you about this donation — required even if you're not signed in.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactName">Full name</Label>
+                <Input id="contactName" className="bg-white text-black" {...register("contactName")} />
+                {errors.contactName && <p className="text-xs text-gold">{errors.contactName.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactPhone">Phone number</Label>
+                <Input
+                  id="contactPhone"
+                  placeholder="07XXXXXXXX"
+                  className="bg-white text-black"
+                  {...register("contactPhone")}
+                />
+                {errors.contactPhone && <p className="text-xs text-gold">{errors.contactPhone.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail">Email (optional)</Label>
+                <Input
+                  id="contactEmail"
+                  type="email"
+                  className="bg-white text-black"
+                  {...register("contactEmail")}
+                />
+                {errors.contactEmail && <p className="text-xs text-gold">{errors.contactEmail.message}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-lg border border-white/20 p-4">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="pickupRequested"
@@ -412,7 +419,7 @@ const Donate = () => {
                     )}
                   </div>
                   <p className="text-xs text-primary-foreground/70">
-                    This is a request, not a confirmed slot — our team will follow up by email to confirm timing.
+                    This is a request, not a confirmed slot — our team will contact you directly to confirm timing.
                   </p>
                 </div>
               )}
@@ -456,6 +463,13 @@ const Donate = () => {
                     {impact.landfill}
                   </span>{" "}
                   m³ landfill reduced
+                </p>
+                <p className="text-xs text-primary-foreground/60 pt-2">
+                  Estimated by category —{" "}
+                  <Link to="/impact" className="underline hover:text-gold">
+                    see how we calculate this
+                  </Link>
+                  .
                 </p>
               </div>
             ) : (

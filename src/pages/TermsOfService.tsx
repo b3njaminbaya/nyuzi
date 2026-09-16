@@ -64,7 +64,7 @@ const TermsOfService = () => {
                         <li>By submitting a donation, you confirm the item is yours to give away and that its condition and description are accurate to the best of your knowledge.</li>
                         <li>Donations are given freely and without expectation of payment. Nyuzi may photograph, describe, upcycle, resell, or otherwise repurpose donated items at its discretion.</li>
                         <li>An automated tool suggests a category for your donation based on any photo you attach; this suggestion is advisory only and reviewed by our team before an item enters our workflow.</li>
-                        <li>Requesting pickup does not guarantee collection on a specific date — pickup scheduling is currently coordinated manually by our team by email.</li>
+                        <li>Requesting pickup does not guarantee collection on a specific date — pickup scheduling is currently coordinated manually by our team, who will contact you directly using the phone number you provide.</li>
                     </ul>
                 </section>
 

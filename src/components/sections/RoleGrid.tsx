@@ -5,7 +5,7 @@ import { Gift, ShoppingBag, Factory } from "lucide-react";
 const roles = [
   {
     title: "Donors",
-    desc: "List clothing, shoes, and accessories for donation, schedule pickups or drop-offs, and earn green rewards for every contribution.",
+    desc: "List clothing, shoes, and accessories for donation, request a pickup, and see the real environmental impact of every contribution.",
     icon: Gift,
     cta: { label: "Donate Now", to: "/donate" },
   },

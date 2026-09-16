@@ -1,15 +1,61 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Copy, Gift } from "lucide-react";
+import { Copy, Gift, ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Seo from "@/components/Seo";
 import { useAuth } from "@/lib/auth-context";
 import { listMyOrders, type Order, type OrderStatus } from "@/lib/orders";
 import { listMyDonations, type MyDonation } from "@/lib/submissions";
 import { getMyRewards, getReferralRewardAmounts, type MyRewards, type ReferralRewardAmounts } from "@/lib/rewards";
+import { getMyDonationProducts, type MyDonationProduct } from "@/lib/traceability";
+import { getDonationPhotoUrl, listDonationPhotos } from "@/lib/donation-photos";
 import { formatKES } from "@/lib/currency";
+
+const DonationPhotosDialog = ({ donation, onClose }: { donation: MyDonation; onClose: () => void }) => {
+  const [urls, setUrls] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await listDonationPhotos(donation.id);
+      const resolved = await Promise.all(
+        data.map(async (photo) => (await getDonationPhotoUrl(photo.storage_path)).url)
+      );
+      if (!cancelled) {
+        setUrls(resolved.filter((u): u is string => Boolean(u)));
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [donation.id]);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{donation.title}</DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading photos…</p>
+        ) : urls.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No photos were uploaded with this donation.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            {urls.map((url) => (
+              <img key={url} src={url} alt="" className="rounded-md object-cover aspect-square" />
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 const orderStatusVariant = (status: OrderStatus) => {
   if (status === "paid" || status === "shipped" || status === "fulfilled") return "default" as const;
@@ -26,28 +72,34 @@ const MyAccount = () => {
   const { user, loading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [donations, setDonations] = useState<MyDonation[]>([]);
+  const [donationProducts, setDonationProducts] = useState<MyDonationProduct[]>([]);
   const [rewards, setRewards] = useState<MyRewards | null>(null);
   const [rewardAmounts, setRewardAmounts] = useState<ReferralRewardAmounts | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [viewingPhotosFor, setViewingPhotosFor] = useState<MyDonation | null>(null);
 
   useEffect(() => {
     if (!user) return;
     getReferralRewardAmounts().then(({ data }) => setRewardAmounts(data));
-    Promise.all([listMyOrders(user.id), listMyDonations(user.id), getMyRewards(user.id)]).then(
-      ([ordersRes, donationsRes, rewardsRes]) => {
-        if (ordersRes.error || donationsRes.error || rewardsRes.error) {
-          setLoadError(true);
-          toast.error("Some account data couldn't be loaded", {
-            description: ordersRes.error ?? donationsRes.error ?? rewardsRes.error ?? undefined,
-          });
-        }
-        setOrders(ordersRes.data);
-        setDonations(donationsRes.data);
-        setRewards(rewardsRes.data);
-        setDataLoading(false);
+    Promise.all([
+      listMyOrders(user.id),
+      listMyDonations(user.id),
+      getMyRewards(user.id),
+      getMyDonationProducts(),
+    ]).then(([ordersRes, donationsRes, rewardsRes, donationProductsRes]) => {
+      if (ordersRes.error || donationsRes.error || rewardsRes.error) {
+        setLoadError(true);
+        toast.error("Some account data couldn't be loaded", {
+          description: ordersRes.error ?? donationsRes.error ?? rewardsRes.error ?? undefined,
+        });
       }
-    );
+      setOrders(ordersRes.data);
+      setDonations(donationsRes.data);
+      setRewards(rewardsRes.data);
+      setDonationProducts(donationProductsRes.data);
+      setDataLoading(false);
+    });
   }, [user]);
 
   const referralLink = rewards ? `${window.location.origin}/?ref=${rewards.referralCode}` : "";
@@ -142,23 +194,56 @@ const MyAccount = () => {
           </p>
         ) : (
           <div className="mt-4 space-y-3">
-            {donations.map((donation) => (
-              <div
-                key={donation.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card p-4"
-              >
-                <div>
-                  <div className="font-medium">{donation.title}</div>
-                  <div className="text-sm text-muted-foreground capitalize">
-                    {donation.category} · {new Date(donation.created_at).toLocaleDateString()}
+            {donations.map((donation) => {
+              const linkedProduct = donationProducts.find((p) => p.donationId === donation.id);
+              return (
+                <div key={donation.id} className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-medium">{donation.title}</div>
+                      <div className="text-sm text-muted-foreground capitalize">
+                        {donation.category} · {new Date(donation.created_at).toLocaleDateString()}
+                      </div>
+                      {donation.pickup_requested && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Pickup requested
+                          {donation.pickup_date &&
+                            ` for ${new Date(`${donation.pickup_date}T00:00:00`).toLocaleDateString()}`}
+                          {donation.pickup_address && ` · ${donation.pickup_address}`}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <Badge variant={donationStatusVariant(donation.status)}>{donation.status}</Badge>
+                      {donation.photo_count > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-1.5 h-auto py-1"
+                          onClick={() => setViewingPhotosFor(donation)}
+                        >
+                          <ImageIcon size={14} /> {donation.photo_count}
+                        </Button>
+                      )}
+                    </div>
                   </div>
+                  {linkedProduct && (
+                    <div className="mt-2 pt-2 border-t border-border text-sm">
+                      <Link to={`/product/${linkedProduct.productSlug}`} className="text-primary hover:underline">
+                        → Now part of "{linkedProduct.productTitle}"
+                      </Link>
+                    </div>
+                  )}
                 </div>
-                <Badge variant={donationStatusVariant(donation.status)}>{donation.status}</Badge>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
+
+      {viewingPhotosFor && (
+        <DonationPhotosDialog donation={viewingPhotosFor} onClose={() => setViewingPhotosFor(null)} />
+      )}
     </div>
   );
 };

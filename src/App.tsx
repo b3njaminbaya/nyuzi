@@ -15,6 +15,8 @@ const Donate = lazy(() => import("./pages/Donate"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const Impact = lazy(() => import("./pages/Impact"));
+const About = lazy(() => import("./pages/About"));
+const FAQ = lazy(() => import("./pages/FAQ"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
@@ -53,6 +55,8 @@ const App = () => (
                   <Route path="/marketplace" element={<Marketplace />} />
                   <Route path="/product/:slug" element={<ProductDetail />} />
                   <Route path="/impact" element={<Impact />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/faq" element={<FAQ />} />
                   <Route path="/privacypolicy" element={<PrivacyPolicy />} />
                   <Route path="/termsofservice" element={<TermsOfService />} />
                   <Route path="/cookiepolicy" element={<CookiePolicy />} />
