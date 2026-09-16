@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,6 +7,8 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,7 +19,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import Seo from "@/components/Seo";
 import FormBanner, { type FormBannerState } from "@/components/FormBanner";
-import { submitDonation } from "@/lib/submissions";
+import { submitDonation, updateDonationPhotoCount } from "@/lib/submissions";
 import { classifyDonationPhoto, type ClassificationSuggestion } from "@/lib/photo-classifier";
 import { uploadDonationPhotos } from "@/lib/donation-photos";
 import {
@@ -47,13 +49,25 @@ const steps = [
   },
 ];
 
-const donationSchema = z.object({
-  title: z.string().trim().min(2, "Give your item a short title"),
-  category: z.enum(["clothing", "shoes", "accessories", "other"], {
-    required_error: "Choose a category",
-  }),
-  notes: z.string().trim().optional(),
-});
+const donationSchema = z
+  .object({
+    title: z.string().trim().min(2, "Give your item a short title"),
+    category: z.enum(["clothing", "shoes", "accessories", "other"], {
+      required_error: "Choose a category",
+    }),
+    notes: z.string().trim().optional(),
+    pickupRequested: z.boolean(),
+    pickupDate: z.string().optional(),
+    pickupAddress: z.string().trim().optional(),
+  })
+  .refine((data) => !data.pickupRequested || Boolean(data.pickupDate), {
+    message: "Choose a pickup date",
+    path: ["pickupDate"],
+  })
+  .refine((data) => !data.pickupRequested || Boolean(data.pickupAddress?.trim()), {
+    message: "Enter a pickup address",
+    path: ["pickupAddress"],
+  });
 
 type DonationFormValues = z.infer<typeof donationSchema>;
 
@@ -73,7 +87,7 @@ const Donate = () => {
   const [classifying, setClassifying] = useState(false);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const photosRef = useRef<HTMLInputElement>(null);
-  const pickupIntent = useRef(false);
+  const [pickupRequested, setPickupRequested] = useState(false);
   // Kept separately from `suggestion` (which clears once shown/accepted) so
   // submission can still record what the AI suggested either way.
   const lastSuggestionRef = useRef<ClassificationSuggestion | null>(null);
@@ -86,13 +100,18 @@ const Donate = () => {
     formState: { errors, isSubmitting },
   } = useForm<DonationFormValues>({
     resolver: zodResolver(donationSchema),
+    defaultValues: { pickupRequested: false },
   });
 
-  const photoPreviews = photos.map((file) => URL.createObjectURL(file));
+  // Memoized so a new batch of object URLs is only created when `photos`
+  // itself changes -- previously this ran on every render (e.g. typing in
+  // the title field), leaking a new blob URL per photo per keystroke since
+  // the cleanup effect only revoked URLs when `photos` changed, not on
+  // every render that created them.
+  const photoPreviews = useMemo(() => photos.map((file) => URL.createObjectURL(file)), [photos]);
   useEffect(() => {
     return () => photoPreviews.forEach((url) => URL.revokeObjectURL(url));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photos]);
+  }, [photoPreviews]);
 
   const removePhoto = (index: number) => {
     setPhotos((prev) => prev.filter((_, i) => i !== index));
@@ -131,14 +150,15 @@ const Donate = () => {
 
   const onSubmit = handleSubmit(async (values) => {
     setBanner(null);
-    const pickupRequested = pickupIntent.current;
     const { donationId, error } = await submitDonation({
       title: values.title,
       category: values.category,
       condition,
       notes: values.notes,
       photoCount: photos.length,
-      pickupRequested,
+      pickupRequested: values.pickupRequested,
+      pickupDate: values.pickupRequested ? values.pickupDate : undefined,
+      pickupAddress: values.pickupRequested ? values.pickupAddress : undefined,
       aiSuggestedCategory: lastSuggestionRef.current?.category,
       aiConfidence: lastSuggestionRef.current?.confidence,
     });
@@ -154,6 +174,13 @@ const Donate = () => {
       setUploadingPhotos(true);
       const { uploaded, failed } = await uploadDonationPhotos(donationId, photos);
       setUploadingPhotos(false);
+      // photo_count was written provisionally when the donation was created
+      // (before we knew whether every upload would succeed) -- reconcile it
+      // now so an admin reviewing this donation never sees a photo count
+      // higher than what's actually in storage.
+      if (uploaded !== photos.length) {
+        await updateDonationPhotoCount(donationId, uploaded);
+      }
       if (failed > 0) {
         photoNote = ` ${uploaded} of ${photos.length} photo${photos.length === 1 ? "" : "s"} uploaded — the donation itself is saved either way.`;
       }
@@ -161,19 +188,21 @@ const Donate = () => {
 
     setBanner({
       type: "success",
-      title: pickupRequested ? "Donation saved — pickup requested" : "Donation saved",
+      title: values.pickupRequested ? "Donation saved — pickup requested" : "Donation saved",
       description:
-        "We'll follow up by email to coordinate collection; pickup scheduling is still manual for now." + photoNote,
+        (values.pickupRequested
+          ? `We'll aim to collect it around ${values.pickupDate} — we'll follow up by email to confirm timing.`
+          : "We'll follow up by email to coordinate collection or drop-off.") + photoNote,
     });
-    toast.success(pickupRequested ? "Donation saved — pickup requested" : "Donation saved");
+    toast.success(values.pickupRequested ? "Donation saved — pickup requested" : "Donation saved");
 
-    reset();
+    reset({ pickupRequested: false });
     setCategory("");
     setCondition(70);
+    setPickupRequested(false);
     setPhotos([]);
     setSuggestion(null);
     lastSuggestionRef.current = null;
-    pickupIntent.current = false;
     if (photosRef.current) photosRef.current.value = "";
   });
 
@@ -339,27 +368,69 @@ const Donate = () => {
               />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <div className="space-y-3 rounded-lg border border-white/20 p-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="pickupRequested"
+                  checked={pickupRequested}
+                  onCheckedChange={(checked) => {
+                    const value = checked === true;
+                    setPickupRequested(value);
+                    setValue("pickupRequested", value, { shouldValidate: true });
+                  }}
+                  className="border-white/60"
+                />
+                <Label htmlFor="pickupRequested" className="cursor-pointer">
+                  Request a pickup for this item
+                </Label>
+              </div>
+
+              {pickupRequested && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-2">
+                    <Label htmlFor="pickupDate">Preferred pickup date</Label>
+                    <Input
+                      id="pickupDate"
+                      type="date"
+                      min={new Date().toISOString().slice(0, 10)}
+                      className="bg-white text-black"
+                      {...register("pickupDate")}
+                    />
+                    {errors.pickupDate && <p className="text-xs text-gold">{errors.pickupDate.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pickupAddress">Pickup address</Label>
+                    <Textarea
+                      id="pickupAddress"
+                      rows={2}
+                      placeholder="Where should we collect this from?"
+                      className="bg-white text-black"
+                      {...register("pickupAddress")}
+                    />
+                    {errors.pickupAddress && (
+                      <p className="text-xs text-gold">{errors.pickupAddress.message}</p>
+                    )}
+                  </div>
+                  <p className="text-xs text-primary-foreground/70">
+                    This is a request, not a confirmed slot — our team will follow up by email to confirm timing.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                onClick={() => {
-                  pickupIntent.current = false;
-                }}
                 className="bg-gold text-gold-foreground hover:bg-gold-dark w-full"
               >
-                {uploadingPhotos ? "Uploading photos…" : isSubmitting ? "Saving…" : "Continue"}
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                onClick={() => {
-                  pickupIntent.current = true;
-                }}
-                variant="outline"
-                className="border-gold text-gold hover:bg-gold hover:text-gold-foreground w-full"
-              >
-                {uploadingPhotos ? "Uploading photos…" : isSubmitting ? "Saving…" : "Schedule Pickup"}
+                {uploadingPhotos
+                  ? "Uploading photos…"
+                  : isSubmitting
+                    ? "Saving…"
+                    : pickupRequested
+                      ? "Save donation & request pickup"
+                      : "Save donation"}
               </Button>
             </div>
           </div>
@@ -389,7 +460,7 @@ const Donate = () => {
               </div>
             ) : (
               <p className="text-primary-foreground/70 mt-4 text-sm">
-                Select a category and condition to see your estimated impact.
+                Select a category to see your estimated impact.
               </p>
             )}
           </div>

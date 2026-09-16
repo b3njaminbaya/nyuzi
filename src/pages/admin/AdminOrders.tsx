@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listAllOrders, markOrderShipped, updateOrderStatus, type Order, type OrderStatus } from "@/lib/orders";
+import { formatKES } from "@/lib/currency";
 
 const STATUSES: OrderStatus[] = [
   "pending_payment",
@@ -96,10 +97,14 @@ const ShipOrderDialog = ({
   );
 };
 
+const STATUS_FILTERS: Array<OrderStatus | "all"> = ["all", ...STATUSES];
+
 const AdminOrders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [shippingOrder, setShippingOrder] = useState<Order | null>(null);
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
+  const [search, setSearch] = useState("");
 
   const refresh = async () => {
     setLoading(true);
@@ -118,6 +123,9 @@ const AdminOrders = () => {
       setShippingOrder(order);
       return;
     }
+    if (!confirm(`Change order ${order.id.slice(0, 8)} from "${order.status.replace("_", " ")}" to "${status.replace("_", " ")}"?`)) {
+      return;
+    }
     const { error } = await updateOrderStatus(order.id, status);
     if (error) {
       toast.error("Couldn't update order", { description: error });
@@ -127,14 +135,52 @@ const AdminOrders = () => {
     toast.success("Order updated");
   };
 
+  const filteredOrders = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return orders.filter((o) => {
+      if (statusFilter !== "all" && o.status !== statusFilter) return false;
+      if (!query) return true;
+      return (
+        o.customer_name.toLowerCase().includes(query) ||
+        o.customer_phone.toLowerCase().includes(query) ||
+        o.id.toLowerCase().includes(query)
+      );
+    });
+  }, [orders, statusFilter, search]);
+
   return (
     <div>
       <h1 className="text-2xl font-semibold">Orders</h1>
+
+      <div className="mt-4 flex flex-col sm:flex-row gap-3">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by customer, phone, or order id…"
+          className="sm:max-w-xs"
+          aria-label="Search orders"
+        />
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as OrderStatus | "all")}>
+          <SelectTrigger className="sm:w-48" aria-label="Filter by status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((s) => (
+              <SelectItem key={s} value={s} className="capitalize">
+                {s === "all" ? "All statuses" : s.replace("_", " ")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="mt-4">
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : orders.length === 0 ? (
           <p className="text-sm text-muted-foreground">No orders yet.</p>
+        ) : filteredOrders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No orders match your search.</p>
         ) : (
           <Table>
             <TableHeader>
@@ -149,14 +195,14 @@ const AdminOrders = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {orders.map((o) => (
+              {filteredOrders.map((o) => (
                 <TableRow key={o.id}>
                   <TableCell className="font-mono text-xs">{o.id.slice(0, 8)}</TableCell>
                   <TableCell>
                     <div className="font-medium">{o.customer_name}</div>
                     <div className="text-xs text-muted-foreground">{o.customer_phone}</div>
                   </TableCell>
-                  <TableCell>${o.total_amount.toFixed(2)}</TableCell>
+                  <TableCell>{formatKES(o.total_amount)}</TableCell>
                   <TableCell className="capitalize">
                     {o.payment_method}
                     {o.mpesa_receipt_number && (

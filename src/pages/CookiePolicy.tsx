@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import Seo from "@/components/Seo";
 import { FaCookieBite, FaLock, FaShoppingBag, FaChartBar, FaEnvelope } from "react-icons/fa";
 
@@ -83,7 +84,7 @@ const CookiePolicy = () => {
                 <section className="bg-card border border-border shadow-sm p-6 rounded-lg text-center">
                     <h2 className="text-2xl font-semibold text-primary">Questions?</h2>
                     <p className="mt-4 text-muted-foreground">
-                        See our <a href="/privacypolicy" className="text-primary hover:underline">Privacy Policy</a> for how we handle the personal data you actively give us (like your name, order, or donation details), or reach out directly.
+                        See our <Link to="/privacypolicy" className="text-primary hover:underline">Privacy Policy</Link> for how we handle the personal data you actively give us (like your name, order, or donation details), or reach out directly.
                     </p>
                     <p className="mt-2 font-semibold text-primary">
                         Email: <a href={`mailto:${CONTACT_EMAIL}`} className="hover:underline">{CONTACT_EMAIL}</a>

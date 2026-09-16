@@ -10,6 +10,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useCart } from "@/lib/cart-context";
+import { formatKES } from "@/lib/currency";
 
 const CartSheet = () => {
   const { items, removeItem, updateQty, totalCount, totalPrice } = useCart();
@@ -71,15 +72,19 @@ const CartSheet = () => {
                         size="icon"
                         className="h-6 w-6"
                         onClick={() => updateQty(item.id, item.qty + 1)}
+                        disabled={item.stock > 0 && item.qty >= item.stock}
                         aria-label={`Increase quantity of ${item.title}`}
                       >
                         <Plus size={12} />
                       </Button>
                     </div>
                     <span className="text-sm font-semibold">
-                      ${(item.price * item.qty).toFixed(2)}
+                      {formatKES(item.price * item.qty)}
                     </span>
                   </div>
+                  {item.stock > 0 && item.qty >= item.stock && (
+                    <p className="mt-1 text-xs text-muted-foreground">Max available in stock</p>
+                  )}
                 </div>
                 <button
                   onClick={() => removeItem(item.id)}
@@ -97,7 +102,7 @@ const CartSheet = () => {
           <div className="border-t pt-4">
             <div className="flex items-center justify-between text-sm font-semibold">
               <span>Subtotal</span>
-              <span>${totalPrice.toFixed(2)}</span>
+              <span>{formatKES(totalPrice)}</span>
             </div>
             <Button onClick={handleCheckout} className="mt-4 w-full bg-primary hover:bg-primary-dark">
               Checkout

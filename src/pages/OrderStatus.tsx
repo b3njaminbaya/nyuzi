@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
 import Seo from "@/components/Seo";
 import { Button } from "@/components/ui/button";
-import { getOrder, type Order } from "@/lib/orders";
+import { getOrder, getOrderItems, type Order, type OrderItem } from "@/lib/orders";
+import { formatKES } from "@/lib/currency";
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_ATTEMPTS = 20;
@@ -49,12 +50,17 @@ const statusIcon = (status: Order["status"]) => {
 const OrderStatus = () => {
   const { id } = useParams<{ id: string }>();
   const [order, setOrder] = useState<Order | null>(null);
+  const [items, setItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     let attempts = 0;
     let cancelled = false;
+
+    getOrderItems(id).then(({ data }) => {
+      if (!cancelled) setItems(data);
+    });
 
     const poll = async () => {
       const { order: fetched } = await getOrder(id);
@@ -103,9 +109,23 @@ const OrderStatus = () => {
           <span className="text-muted-foreground">Order</span>
           <span className="font-mono">{order.id.slice(0, 8)}</span>
         </div>
-        <div className="mt-2 flex justify-between">
+
+        {items.length > 0 && (
+          <div className="mt-3 space-y-1.5 border-t border-border pt-3">
+            {items.map((item) => (
+              <div key={item.id} className="flex justify-between text-muted-foreground">
+                <span>
+                  {item.title} × {item.quantity}
+                </span>
+                <span>{formatKES(item.price * item.quantity)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-2 flex justify-between border-t border-border pt-2">
           <span className="text-muted-foreground">Total</span>
-          <span className="font-semibold">${order.total_amount.toFixed(2)}</span>
+          <span className="font-semibold">{formatKES(order.total_amount)}</span>
         </div>
         <div className="mt-2 flex justify-between">
           <span className="text-muted-foreground">Delivering to</span>

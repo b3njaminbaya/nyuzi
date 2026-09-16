@@ -29,6 +29,7 @@ const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
 const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
 const AdminEmailLog = lazy(() => import("./pages/admin/AdminEmailLog"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminNewsletter = lazy(() => import("./pages/admin/AdminNewsletter"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const OrderStatus = lazy(() => import("./pages/OrderStatus"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -74,6 +75,7 @@ const App = () => (
                   <Route path="audit-log" element={<AdminAuditLog />} />
                   <Route path="email-log" element={<AdminEmailLog />} />
                   <Route path="users" element={<AdminUsers />} />
+                  <Route path="newsletter" element={<AdminNewsletter />} />
                 </Route>
               </Routes>
             </Suspense>

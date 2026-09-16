@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { Facebook, Instagram, Youtube, Linkedin } from "lucide-react";
 import { FaXTwitter, FaTiktok } from "react-icons/fa6";
 import { toast } from "sonner";
@@ -8,6 +9,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const Footer = () => {
   const [email, setEmail] = useState("");
+  const [subscribing, setSubscribing] = useState(false);
 
   const handleSubscribe = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -15,7 +17,9 @@ const Footer = () => {
       toast.error("Enter a valid email address");
       return;
     }
+    setSubscribing(true);
     const { error } = await submitNewsletterSignup(email);
+    setSubscribing(false);
     if (error) {
       toast.error("Couldn't subscribe", { description: error });
       return;
@@ -48,36 +52,24 @@ const Footer = () => {
           <h4 className="font-semibold text-gold mb-3">Explore</h4>
           <ul className="space-y-2 text-sm">
             <li>
-              <a
-                href="/donate"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/donate" className="hover:text-gold transition-colors">
                 Donate
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="/marketplace"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/marketplace" className="hover:text-gold transition-colors">
                 Marketplace
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="/impact"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/impact" className="hover:text-gold transition-colors">
                 Impact
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="/partnerwithus"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/partnerwithus" className="hover:text-gold transition-colors">
                 Partner With Us
-              </a>
+              </Link>
             </li>
           </ul>
         </div>
@@ -87,28 +79,19 @@ const Footer = () => {
           <h4 className="font-semibold text-gold mb-3">Legal</h4>
           <ul className="space-y-2 text-sm">
             <li>
-              <a
-                href="/privacypolicy"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/privacypolicy" className="hover:text-gold transition-colors">
                 Privacy Policy
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="/termsofservice"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/termsofservice" className="hover:text-gold transition-colors">
                 Terms of Service
-              </a>
+              </Link>
             </li>
             <li>
-              <a
-                href="/cookiepolicy"
-                className="hover:text-gold transition-colors"
-              >
+              <Link to="/cookiepolicy" className="hover:text-gold transition-colors">
                 Cookie Policy
-              </a>
+              </Link>
             </li>
           </ul>
         </div>
@@ -133,12 +116,14 @@ const Footer = () => {
               onChange={(e) => setEmail(e.target.value)}
               className="flex-1 rounded-md border border-primary-foreground/30 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
               required
+              disabled={subscribing}
             />
             <button
               type="submit"
-              className="bg-gold hover:bg-gold-dark text-gold-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              disabled={subscribing}
+              className="bg-gold hover:bg-gold-dark text-gold-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-60"
             >
-              Subscribe
+              {subscribing ? "Subscribing…" : "Subscribe"}
             </button>
           </form>
         </div>

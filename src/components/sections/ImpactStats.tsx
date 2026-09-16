@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Leaf, Droplets, Recycle, Gift } from "lucide-react";
 import { getImpactTotals, type ImpactTotals } from "@/lib/impact";
 import { formatCO2, formatLandfill, formatWater } from "@/lib/format-impact";
@@ -7,7 +8,10 @@ const ImpactStats = () => {
   const [totals, setTotals] = useState<ImpactTotals | null>(null);
 
   useEffect(() => {
-    getImpactTotals().then(({ totals }) => setTotals(totals));
+    getImpactTotals().then(({ totals, error }) => {
+      if (error) toast.error("Couldn't load impact stats", { description: error });
+      setTotals(totals);
+    });
   }, []);
 
   const stats = [

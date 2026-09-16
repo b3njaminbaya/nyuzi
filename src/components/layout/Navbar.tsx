@@ -55,6 +55,8 @@ const Navbar = () => {
             className="flex items-center justify-center p-2 rounded-md hover:bg-muted"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
+            aria-expanded={isOpen}
+            aria-controls="mobile-nav-menu"
           >
             {isOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -63,7 +65,7 @@ const Navbar = () => {
 
       {/* Mobile Dropdown Menu */}
       {isOpen && (
-        <div className="md:hidden border-t bg-background px-4 pb-4">
+        <div id="mobile-nav-menu" className="md:hidden border-t bg-background px-4 pb-4">
           <div className="flex flex-col gap-4 mt-4">
             {navLinks.map((link) => (
               <NavLink

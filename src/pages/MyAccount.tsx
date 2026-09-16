@@ -8,7 +8,8 @@ import Seo from "@/components/Seo";
 import { useAuth } from "@/lib/auth-context";
 import { listMyOrders, type Order, type OrderStatus } from "@/lib/orders";
 import { listMyDonations, type MyDonation } from "@/lib/submissions";
-import { getMyRewards, type MyRewards } from "@/lib/rewards";
+import { getMyRewards, getReferralRewardAmounts, type MyRewards, type ReferralRewardAmounts } from "@/lib/rewards";
+import { formatKES } from "@/lib/currency";
 
 const orderStatusVariant = (status: OrderStatus) => {
   if (status === "paid" || status === "shipped" || status === "fulfilled") return "default" as const;
@@ -26,12 +27,21 @@ const MyAccount = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [donations, setDonations] = useState<MyDonation[]>([]);
   const [rewards, setRewards] = useState<MyRewards | null>(null);
+  const [rewardAmounts, setRewardAmounts] = useState<ReferralRewardAmounts | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     if (!user) return;
+    getReferralRewardAmounts().then(({ data }) => setRewardAmounts(data));
     Promise.all([listMyOrders(user.id), listMyDonations(user.id), getMyRewards(user.id)]).then(
       ([ordersRes, donationsRes, rewardsRes]) => {
+        if (ordersRes.error || donationsRes.error || rewardsRes.error) {
+          setLoadError(true);
+          toast.error("Some account data couldn't be loaded", {
+            description: ordersRes.error ?? donationsRes.error ?? rewardsRes.error ?? undefined,
+          });
+        }
         setOrders(ordersRes.data);
         setDonations(donationsRes.data);
         setRewards(rewardsRes.data);
@@ -68,10 +78,12 @@ const MyAccount = () => {
             <h2 className="text-xl font-display font-semibold">Rewards & referrals</h2>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Nyuzi credit: <span className="font-semibold text-foreground">${rewards.creditBalance.toFixed(2)}</span> — applied at checkout.
+            Nyuzi credit: <span className="font-semibold text-foreground">{formatKES(rewards.creditBalance)}</span> — applied at checkout.
           </p>
           <p className="mt-3 text-sm text-muted-foreground">
-            Invite a friend — when they make their first purchase, you get $200.00 credit and they get $100.00.
+            {rewardAmounts
+              ? `Invite a friend — when they make their first purchase, you get ${formatKES(rewardAmounts.referrerReward)} credit and they get ${formatKES(rewardAmounts.refereeReward)}.`
+              : "Invite a friend — when they make their first purchase, you both get Nyuzi credit."}
           </p>
           <div className="mt-3 flex items-center gap-2">
             <code className="flex-1 truncate rounded-md bg-muted px-3 py-2 text-xs">{referralLink}</code>
@@ -86,6 +98,8 @@ const MyAccount = () => {
         <h2 className="text-xl font-display font-semibold">Orders</h2>
         {dataLoading ? (
           <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
+        ) : orders.length === 0 && loadError ? (
+          <p className="mt-3 text-sm text-destructive">Couldn't load your orders — try refreshing the page.</p>
         ) : orders.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             No orders yet. <Link to="/marketplace" className="text-primary hover:underline">Browse the marketplace</Link>.
@@ -105,7 +119,7 @@ const MyAccount = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold">${order.total_amount.toFixed(2)}</div>
+                  <div className="font-semibold">{formatKES(order.total_amount)}</div>
                   <Badge variant={orderStatusVariant(order.status)} className="mt-1">
                     {order.status.replace("_", " ")}
                   </Badge>
@@ -120,6 +134,8 @@ const MyAccount = () => {
         <h2 className="text-xl font-display font-semibold">Donations</h2>
         {dataLoading ? (
           <p className="mt-3 text-sm text-muted-foreground">Loading…</p>
+        ) : donations.length === 0 && loadError ? (
+          <p className="mt-3 text-sm text-destructive">Couldn't load your donations — try refreshing the page.</p>
         ) : donations.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             No donations yet. <Link to="/donate" className="text-primary hover:underline">Start a donation</Link>.

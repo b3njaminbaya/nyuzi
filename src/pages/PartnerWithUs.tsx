@@ -141,7 +141,7 @@ const PartnerWithUs = () => {
             </section>
 
             {/* Application Form */}
-            <section id="partner-form" className="bg-secondary/40 text-foreground py-16 px-6">
+            <section id="partner-form" className="scroll-mt-20 bg-secondary/40 text-foreground py-16 px-6">
                 <h2 className="text-3xl font-bold text-center text-primary">Partner Application Form</h2>
                 {banner && (
                     <div className="mt-6 max-w-3xl mx-auto">

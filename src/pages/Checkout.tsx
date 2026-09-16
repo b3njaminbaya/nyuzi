@@ -16,10 +16,15 @@ import { useAuth } from "@/lib/auth-context";
 import { createOrder } from "@/lib/orders";
 import { initiateMpesaPayment, normalizeKenyanPhone } from "@/lib/mpesa";
 import { getMyRewards } from "@/lib/rewards";
+import { formatKES } from "@/lib/currency";
 
 const checkoutSchema = z.object({
   name: z.string().trim().min(2, "Enter your full name"),
-  phone: z.string().trim().min(9, "Enter the phone number to pay with M-Pesa"),
+  phone: z
+    .string()
+    .trim()
+    .min(9, "Enter the phone number to pay with M-Pesa")
+    .refine((v) => normalizeKenyanPhone(v) !== null, "Enter a valid Kenyan number, e.g. 07XXXXXXXX"),
   email: z.string().trim().email("Enter a valid email address").optional().or(z.literal("")),
   address: z.string().trim().min(5, "Enter a delivery address"),
 });
@@ -53,15 +58,8 @@ const Checkout = () => {
 
   const onSubmit = handleSubmit(async (values) => {
     setBanner(null);
-    const normalizedPhone = normalizeKenyanPhone(values.phone);
-    if (!normalizedPhone) {
-      setBanner({
-        type: "error",
-        title: "Enter a valid Kenyan phone number",
-        description: "e.g. 07XXXXXXXX or 2547XXXXXXXX",
-      });
-      return;
-    }
+    // Already guaranteed non-null by the schema's refine() above.
+    const normalizedPhone = normalizeKenyanPhone(values.phone)!;
 
     const { order, error } = await createOrder(
       items,
@@ -82,7 +80,22 @@ const Checkout = () => {
     const payment = await initiateMpesaPayment(order.id, normalizedPhone);
 
     if (payment.configured && payment.success === false) {
-      toast.error("Couldn't start M-Pesa payment", { description: payment.error });
+      // The order itself already failed server-side and its stock was
+      // released (see mpesa-initiate and migration 0024), so it's safe to
+      // let the customer retry immediately with the same cart rather than
+      // sending them to a dead order's status page.
+      setBanner({
+        type: "error",
+        title: "Couldn't start M-Pesa payment",
+        description: `${payment.error ?? "Please try again."} Your cart hasn't been touched — you can try again below.`,
+      });
+      return;
+    }
+
+    if (!payment.configured) {
+      toast("M-Pesa isn't set up on this store yet", {
+        description: "We'll follow up by email to arrange payment for this order.",
+      });
     }
 
     clear();
@@ -152,7 +165,7 @@ const Checkout = () => {
                 <span>
                   {item.title} × {item.qty}
                 </span>
-                <span>${(item.price * item.qty).toFixed(2)}</span>
+                <span>{formatKES(item.price * item.qty)}</span>
               </div>
             ))}
           </div>
@@ -161,7 +174,7 @@ const Checkout = () => {
             <div className="mt-4 flex items-center gap-2 border-t pt-4">
               <Checkbox id="apply-credit" checked={applyCredit} onCheckedChange={(v) => setApplyCredit(v === true)} />
               <Label htmlFor="apply-credit" className="text-sm font-normal cursor-pointer">
-                Use my Nyuzi credit (${creditBalance.toFixed(2)} available)
+                Use my Nyuzi credit ({formatKES(creditBalance)} available)
               </Label>
             </div>
           )}
@@ -169,13 +182,13 @@ const Checkout = () => {
           {creditToApply > 0 && (
             <div className="mt-2 flex justify-between text-sm text-primary">
               <span>Credit applied</span>
-              <span>-${creditToApply.toFixed(2)}</span>
+              <span>-{formatKES(creditToApply)}</span>
             </div>
           )}
 
           <div className="mt-4 flex justify-between border-t pt-4 font-semibold">
             <span>Total</span>
-            <span>${payableTotal.toFixed(2)}</span>
+            <span>{formatKES(payableTotal)}</span>
           </div>
         </div>
       </div>

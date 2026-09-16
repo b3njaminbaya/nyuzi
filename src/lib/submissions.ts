@@ -7,6 +7,8 @@ export type DonationSubmission = {
   notes?: string;
   photoCount: number;
   pickupRequested: boolean;
+  pickupDate?: string;
+  pickupAddress?: string;
   aiSuggestedCategory?: string;
   aiConfidence?: number;
 };
@@ -31,14 +33,29 @@ export async function submitDonation(entry: DonationSubmission) {
     category: entry.category,
     condition: entry.condition,
     notes: entry.notes || null,
+    // Provisional -- the real count is written back by
+    // updateDonationPhotoCount() once uploads actually finish, since some
+    // can fail after this row is created.
     photo_count: entry.photoCount,
     pickup_requested: entry.pickupRequested,
+    pickup_date: entry.pickupDate || null,
+    pickup_address: entry.pickupAddress || null,
     ai_suggested_category: entry.aiSuggestedCategory ?? null,
     ai_confidence: entry.aiConfidence ?? null,
   });
 
   if (error) return { donationId: null, error: error.message };
   return { donationId: id, error: null };
+}
+
+// Photos are uploaded after the donation row is created (see
+// uploadDonationPhotos), and some can fail independently of others -- this
+// reconciles photo_count with how many actually made it to storage, so
+// admins reviewing a donation never see a photo badge that opens to fewer
+// images than it claims.
+export async function updateDonationPhotoCount(donationId: string, count: number) {
+  const { error } = await supabase.from("donations").update({ photo_count: count }).eq("id", donationId);
+  return { error: error?.message ?? null };
 }
 
 export async function submitPartnerApplication(entry: PartnerApplication) {

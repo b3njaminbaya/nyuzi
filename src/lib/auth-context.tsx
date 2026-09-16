@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { getStoredReferralCode } from "@/lib/referral";
+import { clearStoredReferralCode, getStoredReferralCode } from "@/lib/referral";
 
 type Profile = {
   id: string;
@@ -32,31 +32,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    // A single request counter guards two races at once: (1) `loading` must
+    // not clear until the profile fetch for the current session has also
+    // resolved, or admin/role-gated UI briefly renders as if signed out
+    // (AdminLayout would flash "Not authorized" for a real admin on every
+    // hard refresh); (2) if the session changes again before an in-flight
+    // profile fetch resolves (e.g. sign out immediately followed by signing
+    // in as someone else in the same tab), the stale response must not be
+    // allowed to overwrite the newer one.
+    let requestId = 0;
+
+    const applySession = async (newSession: Session | null) => {
+      const thisRequest = ++requestId;
+      setSession(newSession);
+
+      const userId = newSession?.user?.id;
+      if (!userId) {
+        setProfile(null);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, role, referral_code, credit_balance")
+        .eq("id", userId)
+        .single();
+
+      if (thisRequest === requestId) {
+        setProfile(data as Profile | null);
+      }
+    };
+
+    supabase.auth.getSession().then(async ({ data }) => {
+      await applySession(data.session);
       setLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
+      applySession(newSession);
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      requestId += 1;
+      listener.subscription.unsubscribe();
+    };
   }, []);
-
-  useEffect(() => {
-    const userId = session?.user?.id;
-    if (!userId) {
-      setProfile(null);
-      return;
-    }
-    supabase
-      .from("profiles")
-      .select("id, full_name, role, referral_code, credit_balance")
-      .eq("id", userId)
-      .single()
-      .then(({ data }) => setProfile(data as Profile | null));
-  }, [session?.user?.id]);
 
   const signUp: AuthContextValue["signUp"] = async (email, password, fullName) => {
     const referralCode = getStoredReferralCode();
@@ -65,6 +85,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       password,
       options: { data: { full_name: fullName, referral_code: referralCode } },
     });
+    if (!error && referralCode) {
+      clearStoredReferralCode();
+    }
     return { error: error?.message ?? null };
   };
 

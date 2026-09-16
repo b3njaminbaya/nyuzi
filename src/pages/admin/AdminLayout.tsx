@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink, Navigate, Outlet } from "react-router-dom";
-import { Gift, Handshake, History, LayoutDashboard, LogOut, Mail, Menu, Package, Receipt, Star, Tag, Users } from "lucide-react";
+import { Gift, Handshake, History, LayoutDashboard, LogOut, Mail, Menu, Newspaper, Package, Receipt, Star, Tag, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -17,6 +17,7 @@ const navItems = [
   { to: "/admin/audit-log", label: "Audit Log", icon: History },
   { to: "/admin/email-log", label: "Email Log", icon: Mail },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/newsletter", label: "Newsletter", icon: Newspaper },
 ];
 
 const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {

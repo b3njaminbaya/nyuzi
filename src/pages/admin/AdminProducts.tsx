@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/table";
 import {
   createProduct,
+  deleteProductImage,
   deleteProduct,
   listAllProducts,
   slugify,
@@ -40,6 +41,7 @@ import {
   uploadProductImage,
   type Product,
 } from "@/lib/products";
+import { formatKES } from "@/lib/currency";
 import { listCategories, type Category } from "@/lib/categories";
 import {
   linkDonationToProduct,
@@ -199,6 +201,10 @@ const ProductForm = ({
   const [imageUrl, setImageUrl] = useState(editing?.image_url ?? "");
   const [uploading, setUploading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  // Once the admin edits the slug field directly, stop overwriting it from
+  // the title -- otherwise fixing a typo in the title after customizing the
+  // slug silently clobbers that customization.
+  const slugTouchedRef = useRef(Boolean(editing));
 
   useEffect(() => {
     listCategories().then(({ data }) => setCategories(data));
@@ -229,6 +235,7 @@ const ProductForm = ({
   const handleImageChange = async () => {
     const file = fileRef.current?.files?.[0];
     if (!file) return;
+    const previousUrl = imageUrl;
     setUploading(true);
     const { url, error } = await uploadProductImage(file);
     setUploading(false);
@@ -237,6 +244,10 @@ const ProductForm = ({
       return;
     }
     setImageUrl(url!);
+    // Best-effort -- an orphaned file left in storage isn't user-visible or
+    // harmful beyond storage cost, so a failure here shouldn't block saving
+    // the new image the admin actually wants.
+    if (previousUrl) deleteProductImage(previousUrl).catch(() => {});
   };
 
   const onSubmit = handleSubmit(async (values) => {
@@ -274,14 +285,21 @@ const ProductForm = ({
           {...register("title")}
           onChange={(e) => {
             register("title").onChange(e);
-            if (!editing) setValue("slug", slugify(e.target.value));
+            if (!slugTouchedRef.current) setValue("slug", slugify(e.target.value));
           }}
         />
         {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
       </div>
       <div className="space-y-2">
         <Label htmlFor="slug">Slug</Label>
-        <Input id="slug" {...register("slug")} />
+        <Input
+          id="slug"
+          {...register("slug")}
+          onChange={(e) => {
+            slugTouchedRef.current = true;
+            register("slug").onChange(e);
+          }}
+        />
         {errors.slug && <p className="text-xs text-destructive">{errors.slug.message}</p>}
       </div>
       <div className="space-y-2">
@@ -290,7 +308,7 @@ const ProductForm = ({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="price">Price (USD)</Label>
+          <Label htmlFor="price">Price (KES)</Label>
           <Input id="price" type="number" step="0.01" {...register("price")} />
           {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
         </div>
@@ -360,6 +378,7 @@ const AdminProducts = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [search, setSearch] = useState("");
 
   const refresh = async () => {
     setLoading(true);
@@ -395,36 +414,56 @@ const AdminProducts = () => {
       toast.error("Couldn't delete product", { description: error });
       return;
     }
+    if (product.image_url) deleteProductImage(product.image_url).catch(() => {});
     toast.success("Product deleted");
     refresh();
   };
 
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return products;
+    return products.filter(
+      (p) => p.title.toLowerCase().includes(query) || p.category_name.toLowerCase().includes(query)
+    );
+  }, [products, search]);
+
   return (
     <div>
       <h1 className="text-2xl font-semibold">Products</h1>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {products.length} product{products.length === 1 ? "" : "s"}
         </p>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openCreate} className="bg-primary hover:bg-primary-dark gap-2">
-              <Plus size={16} /> New product
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editing ? "Edit product" : "New product"}</DialogTitle>
-            </DialogHeader>
-            <ProductForm editing={editing} onDone={handleDone} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-3">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by title or category…"
+            className="sm:w-64"
+            aria-label="Search products"
+          />
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openCreate} className="bg-primary hover:bg-primary-dark gap-2 shrink-0">
+                <Plus size={16} /> New product
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editing ? "Edit product" : "New product"}</DialogTitle>
+              </DialogHeader>
+              <ProductForm editing={editing} onDone={handleDone} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {loading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       ) : products.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">No products yet — create your first one.</p>
+      ) : filteredProducts.length === 0 ? (
+        <p className="mt-6 text-sm text-muted-foreground">No products match your search.</p>
       ) : (
         <Table className="mt-6">
           <TableHeader>
@@ -438,7 +477,7 @@ const AdminProducts = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products.map((product) => (
+            {filteredProducts.map((product) => (
               <TableRow key={product.id}>
                 <TableCell className="flex items-center gap-3">
                   {product.image_url && (
@@ -447,7 +486,7 @@ const AdminProducts = () => {
                   {product.title}
                 </TableCell>
                 <TableCell>{product.category_name}</TableCell>
-                <TableCell>${product.price.toFixed(2)}</TableCell>
+                <TableCell>{formatKES(product.price)}</TableCell>
                 <TableCell>{product.stock}</TableCell>
                 <TableCell>
                   <Badge variant={product.status === "published" ? "default" : "secondary"}>

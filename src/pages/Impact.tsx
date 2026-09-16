@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import Seo from "@/components/Seo";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -34,11 +36,21 @@ const Impact = () => {
   const [totals, setTotals] = useState<ImpactTotals | null>(null);
   const [trend, setTrend] = useState<ImpactTrendPoint[]>([]);
   const [activity, setActivity] = useState<RecentDonationActivity[]>([]);
+  const [activityError, setActivityError] = useState(false);
 
   useEffect(() => {
-    getImpactTotals().then(({ totals }) => setTotals(totals));
-    getImpactTrend().then(({ data }) => setTrend(data));
-    getRecentDonationActivity().then(({ data }) => setActivity(data));
+    getImpactTotals().then(({ totals, error }) => {
+      if (error) toast.error("Couldn't load impact totals", { description: error });
+      setTotals(totals);
+    });
+    getImpactTrend().then(({ data, error }) => {
+      if (error) toast.error("Couldn't load the impact trend", { description: error });
+      setTrend(data);
+    });
+    getRecentDonationActivity().then(({ data, error }) => {
+      if (error) setActivityError(true);
+      setActivity(data);
+    });
   }, []);
 
   const lifetimeData = [
@@ -177,7 +189,9 @@ const Impact = () => {
             <h2 className="flex items-center gap-2 text-xl font-display font-semibold">
               <MdHistory className="text-primary" /> Recent Activity
             </h2>
-            {activity.length === 0 ? (
+            {activity.length === 0 && activityError ? (
+              <p className="mt-4 text-sm text-destructive">Couldn't load recent activity — try refreshing.</p>
+            ) : activity.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">No donations yet — be the first.</p>
             ) : (
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
@@ -224,12 +238,12 @@ const Impact = () => {
           <h3 className="text-xl font-display font-semibold text-primary">
             Keep up the momentum — every action counts!
           </h3>
-          <a
-            href="/donate"
+          <Link
+            to="/donate"
             className="mt-4 inline-block bg-primary text-primary-foreground font-semibold px-6 py-3 rounded-full hover:bg-primary-dark transition"
           >
             Make Another Contribution
-          </a>
+          </Link>
         </motion.div>
       </div>
     </div>

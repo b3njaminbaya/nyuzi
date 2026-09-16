@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ImageIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,8 @@ type Donation = {
   notes: string | null;
   photo_count: number;
   pickup_requested: boolean;
+  pickup_date: string | null;
+  pickup_address: string | null;
   status: "submitted" | "scheduled" | "collected" | "processed";
   ai_suggested_category: string | null;
   ai_confidence: number | null;
@@ -42,6 +45,7 @@ type Donation = {
 };
 
 const STATUSES: Donation["status"][] = ["submitted", "scheduled", "collected", "processed"];
+const STATUS_FILTERS: Array<Donation["status"] | "all"> = ["all", ...STATUSES];
 
 const PhotoViewerDialog = ({ donation, onClose }: { donation: Donation; onClose: () => void }) => {
   const [urls, setUrls] = useState<string[]>([]);
@@ -90,6 +94,8 @@ const AdminDonations = () => {
   const [donations, setDonations] = useState<Donation[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingPhotosFor, setViewingPhotosFor] = useState<Donation | null>(null);
+  const [statusFilter, setStatusFilter] = useState<Donation["status"] | "all">("all");
+  const [search, setSearch] = useState("");
 
   const refresh = async () => {
     setLoading(true);
@@ -116,14 +122,48 @@ const AdminDonations = () => {
     toast.success("Status updated");
   };
 
+  const filteredDonations = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return donations.filter((d) => {
+      if (statusFilter !== "all" && d.status !== statusFilter) return false;
+      if (!query) return true;
+      return d.title.toLowerCase().includes(query) || d.category.toLowerCase().includes(query);
+    });
+  }, [donations, statusFilter, search]);
+
   return (
     <div>
       <h1 className="text-2xl font-semibold">Donations</h1>
+
+      <div className="mt-4 flex flex-col sm:flex-row gap-3">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by title or category…"
+          className="sm:max-w-xs"
+          aria-label="Search donations"
+        />
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as Donation["status"] | "all")}>
+          <SelectTrigger className="sm:w-48" aria-label="Filter by status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((s) => (
+              <SelectItem key={s} value={s} className="capitalize">
+                {s === "all" ? "All statuses" : s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="mt-4">
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : donations.length === 0 ? (
           <p className="text-sm text-muted-foreground">No donations yet.</p>
+        ) : filteredDonations.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No donations match your search.</p>
         ) : (
           <Table>
             <TableHeader>
@@ -138,7 +178,7 @@ const AdminDonations = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {donations.map((d) => (
+              {filteredDonations.map((d) => (
                 <TableRow key={d.id}>
                   <TableCell>
                     <div className="font-medium">{d.title}</div>
@@ -170,7 +210,19 @@ const AdminDonations = () => {
                   </TableCell>
                   <TableCell>
                     {d.pickup_requested ? (
-                      <Badge>Requested</Badge>
+                      <div>
+                        <Badge>Requested</Badge>
+                        {d.pickup_date && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {new Date(`${d.pickup_date}T00:00:00`).toLocaleDateString()}
+                          </div>
+                        )}
+                        {d.pickup_address && (
+                          <div className="text-xs text-muted-foreground max-w-[16rem] truncate" title={d.pickup_address}>
+                            {d.pickup_address}
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground text-sm">—</span>
                     )}

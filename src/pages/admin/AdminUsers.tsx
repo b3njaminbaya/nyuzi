@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ const AdminUsers = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const refresh = () => {
     listUsersWithRoles().then(({ data, error }) => {
@@ -41,7 +43,10 @@ const AdminUsers = () => {
     refresh();
   }, []);
 
-  const handleRoleChange = async (targetUserId: string, role: UserRole) => {
+  const handleRoleChange = async (targetUserId: string, role: UserRole, targetEmail: string) => {
+    if (!confirm(`Change ${targetEmail}'s role to "${role}"?${role === "admin" ? " This grants full admin access." : ""}`)) {
+      return;
+    }
     setUpdatingId(targetUserId);
     const { error } = await setUserRole(targetUserId, role);
     setUpdatingId(null);
@@ -53,6 +58,14 @@ const AdminUsers = () => {
     refresh();
   };
 
+  const filteredUsers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return users;
+    return users.filter(
+      (u) => u.email.toLowerCase().includes(query) || (u.full_name ?? "").toLowerCase().includes(query)
+    );
+  }, [users, search]);
+
   return (
     <div>
       <h1 className="text-2xl font-semibold">Users</h1>
@@ -60,11 +73,23 @@ const AdminUsers = () => {
         Manage who has admin access — no SQL required. Promote a teammate to admin, or adjust anyone's role.
       </p>
 
+      <div className="mt-4">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email…"
+          className="sm:max-w-xs"
+          aria-label="Search users"
+        />
+      </div>
+
       <div className="mt-6">
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : users.length === 0 ? (
           <p className="text-sm text-muted-foreground">No users yet.</p>
+        ) : filteredUsers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No users match your search.</p>
         ) : (
           <Table>
             <TableHeader>
@@ -77,7 +102,7 @@ const AdminUsers = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => {
+              {filteredUsers.map((u) => {
                 const isSelf = u.id === user?.id;
                 return (
                   <TableRow key={u.id}>
@@ -97,7 +122,7 @@ const AdminUsers = () => {
                       <Select
                         value={u.role}
                         disabled={updatingId === u.id}
-                        onValueChange={(v) => handleRoleChange(u.id, v as UserRole)}
+                        onValueChange={(v) => handleRoleChange(u.id, v as UserRole, u.email)}
                       >
                         <SelectTrigger className="ml-auto w-36" aria-label={`Change role for ${u.email}`}>
                           <SelectValue />

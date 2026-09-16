@@ -165,6 +165,16 @@ export function renderTemplate(template: string, payload: Payload): EmailContent
         ),
       };
     }
+    case "review_pending_moderation": {
+      return {
+        subject: "A new review is waiting for approval",
+        html: layout(
+          "A customer review needs moderation.",
+          `<p>A new review was submitted for <strong>${String(payload.productTitle ?? "a product")}</strong> and is waiting in the moderation queue.</p>
+           <p>Review it from Admin → Reviews.</p>`
+        ),
+      };
+    }
     default:
       return null;
   }

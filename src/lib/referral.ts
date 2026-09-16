@@ -13,3 +13,12 @@ export function captureReferralCode() {
 export function getStoredReferralCode(): string | null {
   return localStorage.getItem(STORAGE_KEY);
 }
+
+// Called once a signup has actually used the stored code. Without this, a
+// second, unrelated person signing up on the same browser/device (a shared
+// or public computer, or the same person signing out and someone else
+// signing in right after) would silently be attributed to the first
+// referral code too.
+export function clearStoredReferralCode() {
+  localStorage.removeItem(STORAGE_KEY);
+}

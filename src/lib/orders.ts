@@ -92,6 +92,20 @@ export async function getOrder(id: string) {
   return { order, error: error?.message ?? null };
 }
 
+export type OrderItem = {
+  id: string;
+  product_id: string | null;
+  title: string;
+  price: number;
+  quantity: number;
+};
+
+export async function getOrderItems(orderId: string) {
+  // Same guest-safe access model as getOrder (see migration 0024).
+  const { data, error } = await supabase.rpc("get_order_items_by_order_id", { p_order_id: orderId });
+  return { data: (data as OrderItem[] | null) ?? [], error: error?.message ?? null };
+}
+
 export async function listMyOrders(userId: string) {
   const { data, error } = await supabase
     .from("orders")

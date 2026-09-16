@@ -5,6 +5,8 @@ import { Gift, Handshake, Leaf, Package, Receipt, Wallet } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getImpactTotals, type ImpactTotals } from "@/lib/impact";
 import { formatCO2 } from "@/lib/format-impact";
+import { formatKES } from "@/lib/currency";
+import { Button } from "@/components/ui/button";
 
 type DashboardStats = {
   total_revenue: number;
@@ -20,24 +22,34 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [impact, setImpact] = useState<ImpactTotals | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setError(null);
     Promise.all([supabase.rpc("get_admin_dashboard_stats"), getImpactTotals()]).then(
       ([statsRes, impactRes]) => {
-        if (statsRes.error) toast.error("Couldn't load dashboard stats", { description: statsRes.error.message });
+        if (statsRes.error) {
+          setError(statsRes.error.message);
+          toast.error("Couldn't load dashboard stats", { description: statsRes.error.message });
+        }
         const row = Array.isArray(statsRes.data) ? statsRes.data[0] : null;
         setStats((row as DashboardStats | null) ?? null);
         setImpact(impactRes.totals);
         setLoading(false);
       }
     );
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   const tiles = stats
     ? [
         {
           label: "Revenue (paid orders)",
-          value: `$${stats.total_revenue.toFixed(2)}`,
+          value: formatKES(stats.total_revenue),
           sub: `${stats.paid_orders_count} paid`,
           icon: Wallet,
           to: "/admin/orders",
@@ -84,6 +96,13 @@ const AdminDashboard = () => {
 
       {loading ? (
         <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
+      ) : error ? (
+        <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/5 p-5">
+          <p className="text-sm text-destructive">Couldn't load dashboard stats: {error}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={load}>
+            Retry
+          </Button>
+        </div>
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tiles.map((tile) => {

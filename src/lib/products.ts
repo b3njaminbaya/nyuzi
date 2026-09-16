@@ -145,13 +145,32 @@ export async function deleteProduct(id: string) {
   return { error: error?.message ?? null };
 }
 
+const DEFAULT_IMAGE_EXTENSION = "jpg";
+
 export async function uploadProductImage(file: File) {
-  const ext = file.name.split(".").pop();
+  const dotIndex = file.name.lastIndexOf(".");
+  const ext = dotIndex > 0 ? file.name.slice(dotIndex + 1).toLowerCase() : DEFAULT_IMAGE_EXTENSION;
   const path = `${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from("product-images").upload(path, file);
   if (error) return { url: null, error: error.message };
   const { data } = supabase.storage.from("product-images").getPublicUrl(path);
   return { url: data.publicUrl, error: null };
+}
+
+// Product image storage paths are content-addressed by random UUID, so the
+// public URL always ends in `/<bucket>/<path>` -- extracting the path back
+// out lets us delete the file an image is being replaced with, instead of
+// leaving it orphaned in storage forever.
+function storagePathFromPublicUrl(url: string): string | null {
+  const marker = "/product-images/";
+  const index = url.indexOf(marker);
+  return index === -1 ? null : url.slice(index + marker.length);
+}
+
+export async function deleteProductImage(imageUrl: string) {
+  const path = storagePathFromPublicUrl(imageUrl);
+  if (!path) return;
+  await supabase.storage.from("product-images").remove([path]);
 }
 
 export function slugify(title: string) {

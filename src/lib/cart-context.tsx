@@ -7,13 +7,14 @@ export type CartItem = {
   img: string;
   category: string;
   qty: number;
+  stock: number;
 };
 
 type AddableProduct = Omit<CartItem, "qty">;
 
 type CartContextValue = {
   items: CartItem[];
-  addItem: (product: AddableProduct) => void;
+  addItem: (product: AddableProduct) => "added" | "at-max-stock";
   removeItem: (id: string) => void;
   updateQty: (id: string, qty: number) => void;
   clear: () => void;
@@ -40,16 +41,33 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addItem = (product: AddableProduct) => {
+  // Stock is only ever authoritatively enforced server-side (see
+  // create_order) -- this is a snapshot taken when the item was added or
+  // last refreshed, so it can go stale if someone else buys the last units
+  // while it sits in a cart. It exists purely so the cart itself can give
+  // immediate feedback instead of letting someone build a cart quantity the
+  // store can never fulfill and only finding out with a generic error at
+  // checkout.
+  const addItem = (product: AddableProduct): "added" | "at-max-stock" => {
+    let result: "added" | "at-max-stock" = "added";
     setItems((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
+        if (product.stock > 0 && existing.qty >= product.stock) {
+          result = "at-max-stock";
+          return prev;
+        }
         return prev.map((item) =>
-          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
+          item.id === product.id ? { ...item, qty: item.qty + 1, stock: product.stock } : item
         );
+      }
+      if (product.stock <= 0) {
+        result = "at-max-stock";
+        return prev;
       }
       return [...prev, { ...product, qty: 1 }];
     });
+    return result;
   };
 
   const removeItem = (id: string) => {
@@ -61,7 +79,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
       removeItem(id);
       return;
     }
-    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, qty } : item)));
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, qty: item.stock > 0 ? Math.min(qty, item.stock) : qty } : item
+      )
+    );
   };
 
   const clear = () => setItems([]);

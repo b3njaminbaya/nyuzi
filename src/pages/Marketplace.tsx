@@ -8,6 +8,7 @@ import { FaShoppingCart, FaLeaf, FaSearch } from "react-icons/fa";
 import { useCart } from "@/lib/cart-context";
 import { listPublishedProducts, type Product, type ProductSort } from "@/lib/products";
 import { listCategories, type Category } from "@/lib/categories";
+import { formatKES } from "@/lib/currency";
 
 const sortOptions: { value: ProductSort; label: string }[] = [
   { value: "newest", label: "Newest" },
@@ -30,6 +31,8 @@ const Marketplace = () => {
   const [sortBy, setSortBy] = useState<ProductSort>("newest");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [minPriceInput, setMinPriceInput] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
 
@@ -46,12 +49,24 @@ const Marketplace = () => {
     listCategories().then(({ data }) => setCategories(data));
   }, []);
 
-  // Debounce the free-text search so we don't fire a query on every
-  // keystroke -- filters below react to `search`, not `searchInput`.
+  // Debounce free-text search and the min/max price inputs the same way --
+  // filters below react to `search`/`minPrice`/`maxPrice`, not the raw
+  // input state, so typing doesn't fire a query (and clear the grid) on
+  // every keystroke.
   useEffect(() => {
     const timeout = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timeout);
   }, [searchInput]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setMinPrice(minPriceInput), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [minPriceInput]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setMaxPrice(maxPriceInput), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [maxPriceInput]);
 
   const filters = {
     search: search || undefined,
@@ -92,13 +107,18 @@ const Marketplace = () => {
   };
 
   const handleAddToCart = (product: Product) => {
-    addItem({
+    const result = addItem({
       id: product.id,
       title: product.title,
       price: product.price,
       img: product.image_url ?? "/placeholder.svg",
       category: product.category_name,
+      stock: product.stock,
     });
+    if (result === "at-max-stock") {
+      toast.error(`Only ${product.stock} of "${product.title}" available — that's all in your cart.`);
+      return;
+    }
     toast.success(`Added "${product.title}" to cart`);
   };
 
@@ -164,8 +184,8 @@ const Marketplace = () => {
               <Input
                 type="number"
                 min={0}
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
+                value={minPriceInput}
+                onChange={(e) => setMinPriceInput(e.target.value)}
                 placeholder="Min"
                 className="w-20 h-9"
                 aria-label="Minimum price"
@@ -174,8 +194,8 @@ const Marketplace = () => {
               <Input
                 type="number"
                 min={0}
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
+                value={maxPriceInput}
+                onChange={(e) => setMaxPriceInput(e.target.value)}
                 placeholder="Max"
                 className="w-20 h-9"
                 aria-label="Maximum price"
@@ -239,7 +259,7 @@ const Marketplace = () => {
                     ) : null}
                     <div className="mt-4 flex items-center justify-between">
                       <span className="text-lg font-semibold text-foreground">
-                        ${p.price.toFixed(2)}
+                        {formatKES(p.price)}
                       </span>
                       <Button
                         size="sm"

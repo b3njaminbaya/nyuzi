@@ -47,6 +47,8 @@ never in git — check what's set with `supabase secrets list`):
 | `EMAIL_WEBHOOK_SECRET` | `send-email` | Set (generated in Supabase Vault, migration 0016) |
 | `EMAIL_FROM` | `send-email` | Not set — defaults to `Nyuzi <onboarding@resend.dev>` |
 | `MPESA_CONSUMER_KEY` / `MPESA_CONSUMER_SECRET` / `MPESA_SHORTCODE` / `MPESA_PASSKEY` / `MPESA_CALLBACK_URL` / `MPESA_ENV` | `mpesa-initiate`, `mpesa-callback` | Not set — checkout automatically falls back to manual-payment mode until these are configured with real Safaricom Daraja credentials |
+| `MPESA_CALLBACK_SECRET` | `mpesa-callback` | **Required before enabling real M-Pesa payments.** A random secret you generate (e.g. `openssl rand -hex 32`) and append as a query param to `MPESA_CALLBACK_URL`, e.g. `https://<project>.functions.supabase.co/mpesa-callback?token=<secret>`. Safaricom echoes the full callback URL back on every request; without a matching token the callback is rejected outright. This is the only thing standing between the callback endpoint and anyone who can guess a CheckoutRequestID, so don't enable `MPESA_CONSUMER_KEY` etc. in production without also setting this. |
+| `ALLOWED_ORIGINS` | `mpesa-initiate` | Comma-separated list of origins allowed to call this function (e.g. `https://nyuzi.example.com`). Falls back to `*` if unset — set this before going live so a third-party page can't trigger STK pushes using this project's anon key. |
 
 Before selling to real customers at any volume, verify a domain in Resend
 (resend.com/domains) and set `EMAIL_FROM` to an address on that domain —

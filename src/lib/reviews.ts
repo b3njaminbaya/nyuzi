@@ -18,6 +18,7 @@ export type MyReview = {
   title: string | null;
   body: string | null;
   status: ReviewStatus;
+  rejectionReason: string | null;
 };
 
 export type ReviewForModeration = {
@@ -29,6 +30,7 @@ export type ReviewForModeration = {
   body: string | null;
   verifiedPurchase: boolean;
   status: ReviewStatus;
+  rejectionReason: string | null;
   reviewerName: string;
   reviewerEmail: string;
   createdAt: string;
@@ -60,10 +62,14 @@ export async function listApprovedReviews(productId: string) {
 export async function getMyReviewForProduct(productId: string) {
   const { data, error } = await supabase
     .from("reviews")
-    .select("id, rating, title, body, status")
+    .select("id, rating, title, body, status, rejection_reason")
     .eq("product_id", productId)
     .maybeSingle();
-  return { data: (data as MyReview | null) ?? null, error: error?.message ?? null };
+  const row = data as (Omit<MyReview, "rejectionReason"> & { rejection_reason: string | null }) | null;
+  return {
+    data: row ? { ...row, rejectionReason: row.rejection_reason } : null,
+    error: error?.message ?? null,
+  };
 }
 
 const POSTGRES_UNIQUE_VIOLATION = "23505";
@@ -81,6 +87,25 @@ export async function submitReview(productId: string, rating: number, title: str
   return { error: error?.message ?? null };
 }
 
+// Lets a customer fix and resubmit a review that was rejected. The RLS
+// policy backing this (migration 0024) only allows a reviewer to move their
+// own review from 'rejected' back to 'pending' -- any other status value
+// here is rejected at the database level, so this can't be used to
+// self-approve.
+export async function resubmitReview(id: string, rating: number, title: string, body: string) {
+  const { error } = await supabase
+    .from("reviews")
+    .update({
+      rating,
+      title: title.trim() || null,
+      body: body.trim() || null,
+      status: "pending",
+      rejection_reason: null,
+    })
+    .eq("id", id);
+  return { error: error?.message ?? null };
+}
+
 export async function listReviewsForModeration() {
   const { data, error } = await supabase.rpc("list_reviews_for_moderation");
   type Row = {
@@ -92,6 +117,7 @@ export async function listReviewsForModeration() {
     review_body: string | null;
     verified_purchase: boolean;
     status: ReviewStatus;
+    rejection_reason: string | null;
     reviewer_name: string;
     reviewer_email: string;
     created_at: string;
@@ -105,6 +131,7 @@ export async function listReviewsForModeration() {
     body: r.review_body,
     verifiedPurchase: r.verified_purchase,
     status: r.status,
+    rejectionReason: r.rejection_reason,
     reviewerName: r.reviewer_name,
     reviewerEmail: r.reviewer_email,
     createdAt: r.created_at,
@@ -112,8 +139,11 @@ export async function listReviewsForModeration() {
   return { data: reviews, error: error?.message ?? null };
 }
 
-export async function moderateReview(id: string, status: "approved" | "rejected") {
-  const { error } = await supabase.from("reviews").update({ status }).eq("id", id);
+export async function moderateReview(id: string, status: "approved" | "rejected", rejectionReason?: string) {
+  const { error } = await supabase
+    .from("reviews")
+    .update({ status, rejection_reason: status === "rejected" ? rejectionReason?.trim() || null : null })
+    .eq("id", id);
   return { error: error?.message ?? null };
 }
 

@@ -13,7 +13,15 @@ import { useCart } from "@/lib/cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { getProductBySlug, type Product } from "@/lib/products";
 import { getProductProvenance, type ProvenanceEntry } from "@/lib/traceability";
-import { getMyReviewForProduct, listApprovedReviews, submitReview, type MyReview, type Review } from "@/lib/reviews";
+import {
+  getMyReviewForProduct,
+  listApprovedReviews,
+  resubmitReview,
+  submitReview,
+  type MyReview,
+  type Review,
+} from "@/lib/reviews";
+import { formatKES } from "@/lib/currency";
 
 const monthYear = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -23,6 +31,7 @@ const ReviewsSection = ({ productId }: { productId: string }) => {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [myReview, setMyReview] = useState<MyReview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editingRejected, setEditingRejected] = useState(false);
 
   const [rating, setRating] = useState(0);
   const [title, setTitle] = useState("");
@@ -46,13 +55,23 @@ const ReviewsSection = ({ productId }: { productId: string }) => {
 
   const average = reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : 0;
 
+  const startEditingRejected = () => {
+    if (!myReview) return;
+    setRating(myReview.rating);
+    setTitle(myReview.title ?? "");
+    setBody(myReview.body ?? "");
+    setEditingRejected(true);
+  };
+
   const handleSubmit = async () => {
     if (rating === 0) {
       toast.error("Choose a star rating first");
       return;
     }
     setSubmitting(true);
-    const { error } = await submitReview(productId, rating, title, body);
+    const { error } = editingRejected && myReview
+      ? await resubmitReview(myReview.id, rating, title, body)
+      : await submitReview(productId, rating, title, body);
     setSubmitting(false);
     if (error) {
       toast.error("Couldn't submit review", { description: error });
@@ -62,6 +81,7 @@ const ReviewsSection = ({ productId }: { productId: string }) => {
     setRating(0);
     setTitle("");
     setBody("");
+    setEditingRejected(false);
     refresh();
   };
 
@@ -101,14 +121,50 @@ const ReviewsSection = ({ productId }: { productId: string }) => {
       <div className="mt-8 rounded-lg border border-border bg-card p-5 max-w-lg">
         {!user ? (
           <p className="text-sm text-muted-foreground">Sign in to leave a review.</p>
+        ) : myReview && myReview.status === "rejected" && editingRejected ? (
+          <div className="space-y-3">
+            <Label>Your rating</Label>
+            <StarRating value={rating} onChange={setRating} size={22} />
+            <div className="space-y-2">
+              <Label htmlFor="review-title">Title (optional)</Label>
+              <Input id="review-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="review-body">Your review (optional)</Label>
+              <Textarea id="review-body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} maxLength={1000} />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSubmit} disabled={submitting} className="bg-primary hover:bg-primary-dark">
+                {submitting ? "Submitting…" : "Resubmit review"}
+              </Button>
+              <Button variant="outline" onClick={() => setEditingRejected(false)} disabled={submitting}>
+                Cancel
+              </Button>
+            </div>
+          </div>
         ) : myReview ? (
-          <p className="text-sm text-muted-foreground">
-            {myReview.status === "pending"
-              ? "Your review is awaiting approval."
-              : myReview.status === "rejected"
-                ? "Your review wasn't approved for publication."
-                : "You've already reviewed this product — thank you!"}
-          </p>
+          <div className="text-sm text-muted-foreground space-y-2">
+            <p>
+              {myReview.status === "pending"
+                ? "Your review is awaiting approval."
+                : myReview.status === "rejected"
+                  ? "Your review wasn't approved for publication."
+                  : "You've already reviewed this product — thank you!"}
+            </p>
+            {myReview.status === "rejected" && (
+              <>
+                {myReview.rejectionReason && (
+                  <p className="text-foreground">
+                    <span className="font-medium">Reason: </span>
+                    {myReview.rejectionReason}
+                  </p>
+                )}
+                <Button size="sm" variant="outline" onClick={startEditingRejected}>
+                  Edit &amp; resubmit
+                </Button>
+              </>
+            )}
+          </div>
         ) : (
           <div className="space-y-3">
             <Label>Your rating</Label>
@@ -153,13 +209,18 @@ const ProductDetail = () => {
 
   const handleAddToCart = () => {
     if (!product) return;
-    addItem({
+    const result = addItem({
       id: product.id,
       title: product.title,
       price: product.price,
       img: product.image_url ?? "/placeholder.svg",
       category: product.category_name,
+      stock: product.stock,
     });
+    if (result === "at-max-stock") {
+      toast.error(`Only ${product.stock} available — that's all in your cart.`);
+      return;
+    }
     toast.success(`Added "${product.title}" to cart`);
   };
 
@@ -203,7 +264,7 @@ const ProductDetail = () => {
         <div>
           <div className="text-xs uppercase tracking-wide text-muted-foreground">{product.category_name}</div>
           <h1 className="mt-1 font-display text-3xl font-semibold text-foreground">{product.title}</h1>
-          <p className="mt-4 text-2xl font-semibold text-foreground">${product.price.toFixed(2)}</p>
+          <p className="mt-4 text-2xl font-semibold text-foreground">{formatKES(product.price)}</p>
 
           {product.description && (
             <p className="mt-4 text-muted-foreground leading-relaxed">{product.description}</p>
